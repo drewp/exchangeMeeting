@@ -1,0 +1,133 @@
+#!/usr/bin/python
+
+"""
+connect to an outlook exchange web server to find the first meeting of
+tomorrow, so I know when to get to work
+"""
+
+import sys, os, re, pprint, getpass, datetime, time
+from twisted.python import log
+from twisted.internet import reactor, defer
+from twisted.web.client import getPage
+from twisted.web import http
+from BeautifulSoup import BeautifulSoup
+from rdflib.Graph import Graph
+from rdflib import Namespace, URIRef, Literal
+from nevow import appserver, loaders, rend, tags as T, static, inevow
+
+EM = Namespace("http://bigasterisk.com/exchangeMeeting/")
+
+def getCalendar(config, top, ymd):
+    """deferred to the html of the calendar page"""
+    val = lambda p: config.value(top, p)
+    url = ("%s/exchange/%s/Calendar/?Cmd=contents&View=Daily&"
+           "Page=1&m=%s&d=%s&y=%s" %
+           (str(val(EM['server'])).rstrip('/'),
+            str(val(EM['user'])),
+            ymd[1], ymd[2], ymd[0]))
+    print "loading", url
+
+    userpass = '%s:%s' % (val(EM['user']),
+                          val(EM['password']))
+    auth = 'Basic %s' % userpass.encode('base64')
+    d = getPage(url, headers={'Authorization' : auth})
+    return d
+
+def parse(html):
+    """returns meetings in the order they're seen on the page"""
+    soup = BeautifulSoup(html)
+    meetings = []
+    for td in soup.findAll(attrs=dict(title=True)):
+        m = re.match(r'(..:..)-(..:..) (.*)', td['title'])
+        if m:
+            meetings.append((m.group(1), m.group(2), m.group(3)))
+    return meetings
+
+def firstMeeting(meetings):
+    """starttime, description of the first meeting that's not canceled"""
+    for start, end, desc in meetings:
+        if desc.startswith('Canceled:'):
+            continue
+        desc = re.sub('^Updated: ', '', desc)
+
+        return (start, desc)
+        break
+    return "no meetings found"
+
+def nextDay():
+    """y,m,d for the upcoming day; day changes at noon"""
+    now = datetime.datetime.now()
+    if now.hour > 12:
+        now += datetime.timedelta(1)
+    return now.year, now.month, now.day
+
+class Main(rend.Page):
+    docFactory = loaders.xmlfile("main.html")
+    def __init__(self, config, top):
+        self.ymd = nextDay()
+        self.day = datetime.date(*self.ymd)
+        self.config, self.top = config, top
+        self.startDesc = None
+
+    def child_(self, ctx):
+        return Main(self.config, self.top)
+
+    def renderHTTP(self, ctx):
+        request = inevow.IRequest(ctx)
+        val = lambda p: self.config.value(self.top, p)
+        if ((request.getUser(), request.getPassword()) !=
+            (val(EM['authUser']), val(EM['authPassword']))):
+            return self.unauthorized(request)
+        
+        return rend.Page.renderHTTP(self, ctx)
+
+    def unauthorized(self, request):
+        request.setHeader('WWW-Authenticate',
+                          'Basic realm="First meeting time"')
+        request.setResponseCode(http.UNAUTHORIZED)
+        return "Authentication required."
+
+    def getStartDesc(self):
+        if self.startDesc is not None:
+            return defer.succeed(self.startDesc)
+        
+        d = getCalendar(config, top, self.ymd)
+        #d = defer.succeed(open("calpage.html").read())
+        def withHtml(html):
+            meetings = parse(html)
+            start, desc = firstMeeting(meetings)
+            self.startDesc = start, desc
+            return self.startDesc
+        d.addCallback(withHtml)
+        return d
+
+    def render_date(self, ctx, data):
+        return self.day.strftime("%A, %Y-%m-%d")
+
+    def render_meetTime(self, ctx, data):
+        d = self.getStartDesc()
+        @d.addCallback
+        def done(startDesc):
+            return startDesc[0]
+        return d
+
+    def render_desc(self, ctx, data):
+        d = self.getStartDesc()
+        @d.addCallback
+        def done(startDesc):
+            return startDesc[1]
+        return d
+    
+setattr(Main, 'child_345009210_1f826cd5a1_b-500.jpg',
+        static.File("345009210_1f826cd5a1_b-500.jpg"))
+
+config = Graph()
+top = URIRef("file://" + os.path.abspath("config.n3"))
+config.parse(top, format="n3")
+
+passwd = getpass.getpass("Password for %s: " % config.value(top, EM['user']))
+config.add((top, EM['password'], Literal(passwd)))
+
+log.startLogging(sys.stdout)
+reactor.listenTCP(9003, appserver.NevowSite(Main(config, top)))
+reactor.run()
