@@ -14,34 +14,8 @@ from BeautifulSoup import BeautifulSoup
 from rdflib.Graph import Graph
 from rdflib import Namespace, URIRef, Literal
 from nevow import appserver, loaders, rend, tags as T, static, inevow
-
+import outlookcalendar
 EM = Namespace("http://bigasterisk.com/exchangeMeeting/")
-
-def getCalendar(config, top, ymd):
-    """deferred to the html of the calendar page"""
-    val = lambda p: config.value(top, p)
-    url = ("%s/exchange/%s/Calendar/?Cmd=contents&View=Daily&"
-           "Page=1&m=%s&d=%s&y=%s" %
-           (str(val(EM['server'])).rstrip('/'),
-            str(val(EM['user'])),
-            ymd[1], ymd[2], ymd[0]))
-    print "loading", url
-
-    userpass = '%s:%s' % (val(EM['user']),
-                          val(EM['password']))
-    auth = 'Basic %s' % userpass.encode('base64')
-    d = getPage(url, headers={'Authorization' : auth})
-    return d
-
-def parse(html):
-    """returns meetings in the order they're seen on the page"""
-    soup = BeautifulSoup(html)
-    meetings = []
-    for td in soup.findAll(attrs=dict(title=True)):
-        m = re.match(r'(..:..)-(..:..) (.*)', td['title'])
-        if m:
-            meetings.append((m.group(1), m.group(2), m.group(3)))
-    return meetings
 
 def firstMeeting(meetings):
     """starttime, description of the first meeting that's not canceled"""
@@ -91,10 +65,10 @@ class Main(rend.Page):
         if self.startDesc is not None:
             return defer.succeed(self.startDesc)
         
-        d = getCalendar(config, top, self.ymd)
+        d = defer.succeed(outlookcalendar.getCalendar(config, top, self.ymd))
         #d = defer.succeed(open("calpage.html").read())
         def withHtml(html):
-            meetings = parse(html)
+            meetings = outlookcalendar.parse(html)
             start, desc = firstMeeting(meetings)
             self.startDesc = start, desc
             return self.startDesc
@@ -118,8 +92,8 @@ class Main(rend.Page):
             return startDesc[1]
         return d
     
-setattr(Main, 'child_345009210_1f826cd5a1_b-500.jpg',
-        static.File("345009210_1f826cd5a1_b-500.jpg"))
+setattr(Main, 'child_bg.jpg',
+        static.File("345009210_1f826cd5a1_b-iphone.jpg"))
 
 config = Graph()
 top = URIRef("file://" + os.path.abspath("config.n3"))
