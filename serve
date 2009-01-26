@@ -8,6 +8,7 @@ tomorrow, so I know when to get to work
 import sys, os, re, pprint, getpass, datetime, time
 from twisted.python import log
 from twisted.internet import reactor, defer
+from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.web.client import getPage
 from twisted.web import http
 from BeautifulSoup import BeautifulSoup
@@ -35,7 +36,25 @@ def nextDay():
         now += datetime.timedelta(1)
     return now.year, now.month, now.day
 
-class Main(rend.Page):
+
+def unauthorized(request):
+    request.setHeader('WWW-Authenticate',
+                      'Basic realm="First meeting time"')
+    request.setResponseCode(http.UNAUTHORIZED)
+    return "Authentication required."
+
+class WithLogin(object):
+    def renderHTTP(self, ctx):
+        request = inevow.IRequest(ctx)
+        val = lambda p: self.config.value(self.top, p)
+        if ((request.getUser(), request.getPassword()) !=
+            (val(EM['authUser']), val(EM['authPassword']))):
+            return unauthorized(request)
+        
+        return rend.Page.renderHTTP(self, ctx)
+
+
+class Main(WithLogin, rend.Page):
     docFactory = loaders.xmlfile("main.html")
     def __init__(self, config, top):
         self.ymd = nextDay()
@@ -45,21 +64,6 @@ class Main(rend.Page):
 
     def child_(self, ctx):
         return Main(self.config, self.top)
-
-    def renderHTTP(self, ctx):
-        request = inevow.IRequest(ctx)
-        val = lambda p: self.config.value(self.top, p)
-        if ((request.getUser(), request.getPassword()) !=
-            (val(EM['authUser']), val(EM['authPassword']))):
-            return self.unauthorized(request)
-        
-        return rend.Page.renderHTTP(self, ctx)
-
-    def unauthorized(self, request):
-        request.setHeader('WWW-Authenticate',
-                          'Basic realm="First meeting time"')
-        request.setResponseCode(http.UNAUTHORIZED)
-        return "Authentication required."
 
     def getStartDesc(self):
         if self.startDesc is not None:
@@ -91,9 +95,29 @@ class Main(rend.Page):
         def done(startDesc):
             return startDesc[1]
         return d
-    
+
+    def child_all(self, ctx):
+        return AllMeetings(self.config, self.top)
+
 setattr(Main, 'child_bg.jpg',
         static.File("345009210_1f826cd5a1_b-iphone.jpg"))
+
+class AllMeetings(WithLogin, rend.Page):
+    docFactory = loaders.stan([T.h1['All meetings'], T.directive('list')])
+    def __init__(self, config, top):
+        self.ymd = nextDay()
+        self.day = datetime.date(*self.ymd)
+        self.config, self.top = config, top
+
+    @inlineCallbacks
+    def render_list(self, ctx, data):
+        html = yield outlookcalendar.getCalendar(config, top, self.ymd)
+        meetings = outlookcalendar.parse(html)
+        # show current time, cull completed meetings, etc
+        ul = T.ul[[T.li["%s - %s %s" % (m[0], m[1], m[2])] for m in meetings]]
+
+        returnValue(ul)
+    
 
 config = Graph()
 top = URIRef("file://" + os.path.abspath("config.n3"))
