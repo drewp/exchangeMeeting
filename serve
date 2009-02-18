@@ -30,9 +30,9 @@ def firstMeeting(meetings):
     return "no meetings found"
 
 def nextDay():
-    """y,m,d for the upcoming day; day changes at noon"""
+    """y,m,d for the upcoming day; day changes at 19:00"""
     now = datetime.datetime.now()
-    if now.hour > 12:
+    if now.hour > 19:
         now += datetime.timedelta(1)
     return now.year, now.month, now.day
 

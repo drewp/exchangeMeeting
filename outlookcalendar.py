@@ -28,9 +28,12 @@ seems old
 new-style OWA, here's a single url for login and day:
   https://owa.dwextra.com/owa/auth/logon.aspx?url=https://owa.dwextra.com/owa/%3Fae=Folder%26t=IPF.Appointment%26yr=2007%26mn=11%26dy=28
 
+
+error handling is poor. even a wrong username doesn't make an exception.
+
 """
 
-def getCalendar(config, top, ymd):
+def _getCalendar(config, top, ymd):
     b = twill.get_browser()
     b.set_agent_string("Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.7) Gecko/20040616")
 
@@ -48,6 +51,15 @@ def getCalendar(config, top, ymd):
     C.submit(8)
 
     return b.get_html()
+
+
+def getCalendar(config, top, ymd):
+    """tries to get the calendar data two times, since sometimes I'm
+    getting failures that fix after one retry"""
+    try:
+        return _getCalendar(config, top, ymd)
+    except twill.errors.TwillAssertionError, e:
+        return _getCalendar(config, top, ymd)
 
 def parse(html):
     """returns meetings in the order they're seen on the page"""
@@ -72,7 +84,7 @@ if __name__ == '__main__':
         passwd = getpass.getpass("Password for %s: " % config.value(top, EM['user']))
         config.add((top, EM['password'], Literal(passwd)))
 
-        cal = getCalendar(config, top, (2007, 11, 29))
+        cal = getCalendar(config, top, (2009, 1, 26))
         open("owa", "w").write(cal)
     else:
         cal = open("owa").read()
