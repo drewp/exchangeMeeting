@@ -46,9 +46,15 @@ def unauthorized(request):
 class WithLogin(object):
     def renderHTTP(self, ctx):
         request = inevow.IRequest(ctx)
-        val = lambda p: self.config.value(self.top, p)
-        if ((request.getUser(), request.getPassword()) !=
-            (val(EM['authUser']), val(EM['authPassword']))):
+
+        auth = (request.getUser(), request.getPassword())
+
+        for siteAuth in self.config.objects(self.top, EM['siteAuth']):
+            a = (self.config.value(siteAuth, EM['user']),
+                 self.config.value(siteAuth, EM['password']))
+            if a == auth:
+                break
+        else:
             return unauthorized(request)
         
         return rend.Page.renderHTTP(self, ctx)
