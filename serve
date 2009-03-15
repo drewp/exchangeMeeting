@@ -27,7 +27,7 @@ def firstMeeting(meetings):
 
         return (start, desc)
         break
-    return "no meetings found"
+    return "", "no meetings found"
 
 def nextDay():
     """y,m,d for the upcoming day; day changes at 19:00"""
@@ -122,7 +122,7 @@ class AllMeetings(WithLogin, rend.Page):
         # show current time, cull completed meetings, etc
         ul = T.ul[[T.li["%s - %s %s" % (m[0], m[1], m[2])] for m in meetings]]
 
-        returnValue(ul)
+        returnValue([T.div[self.day.isoformat()], ul])
     
 
 config = Graph()
