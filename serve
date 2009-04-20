@@ -14,7 +14,8 @@ from twisted.web import http
 from BeautifulSoup import BeautifulSoup
 from rdflib.Graph import Graph
 from rdflib import Namespace, URIRef, Literal
-from nevow import appserver, loaders, rend, tags as T, static, inevow
+from nevow import appserver, loaders, rend, tags as T, static, inevow, url
+from nevowopenid import WithOpenid
 import outlookcalendar
 EM = Namespace("http://bigasterisk.com/exchangeMeeting/")
 
@@ -37,30 +38,7 @@ def nextDay():
     return now.year, now.month, now.day
 
 
-def unauthorized(request):
-    request.setHeader('WWW-Authenticate',
-                      'Basic realm="First meeting time"')
-    request.setResponseCode(http.UNAUTHORIZED)
-    return "Authentication required."
-
-class WithLogin(object):
-    def renderHTTP(self, ctx):
-        request = inevow.IRequest(ctx)
-
-        auth = (request.getUser(), request.getPassword())
-
-        for siteAuth in self.config.objects(self.top, EM['siteAuth']):
-            a = (self.config.value(siteAuth, EM['user']),
-                 self.config.value(siteAuth, EM['password']))
-            if a == auth:
-                break
-        else:
-            return unauthorized(request)
-        
-        return rend.Page.renderHTTP(self, ctx)
-
-
-class Main(WithLogin, rend.Page):
+class Main(WithOpenid, rend.Page):
     docFactory = loaders.xmlfile("main.html")
     def __init__(self, config, top):
         self.ymd = nextDay()
@@ -108,7 +86,10 @@ class Main(WithLogin, rend.Page):
 setattr(Main, 'child_bg.jpg',
         static.File("345009210_1f826cd5a1_b-iphone.jpg"))
 
-class AllMeetings(WithLogin, rend.Page):
+class TestPage(rend.Page):
+    docFactory = loaders.stan(T.h1['Test page'])
+        
+class AllMeetings(rend.Page):
     docFactory = loaders.stan([T.h1['All meetings'], T.directive('list')])
     def __init__(self, config, top):
         self.ymd = nextDay()
