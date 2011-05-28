@@ -1,18 +1,9 @@
-import sys, os, re, pprint, getpass, datetime, time, urllib
-from twisted.python import log
-from twisted.internet import reactor, defer
-from twisted.web.client import getPage
-from twisted.web import http
+import os, getpass, urllib
 from BeautifulSoup import BeautifulSoup
 from rdflib.Graph import Graph
-from rdflib import Namespace, URIRef, Literal
-import re, pprint, time, base64, os
-from StringIO import StringIO
-from BeautifulSoup import BeautifulSoup
 import twill
 import twill.commands as C
-from rdflib.Graph import Graph
-from rdflib import URIRef, Namespace, RDFS, Literal, RDF
+from rdflib import URIRef, Namespace, Literal
 
 EM = Namespace("http://bigasterisk.com/exchangeMeeting/")
 
