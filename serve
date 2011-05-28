@@ -5,19 +5,16 @@ connect to an outlook exchange web server to find the first meeting of
 tomorrow, so I know when to get to work
 """
 
-import sys, os, re, pprint, getpass, datetime, time
+import os, re, datetime
 from twisted.python import log
-from twisted.internet import reactor, defer
-from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.web.client import getPage
-from twisted.web import http
-from BeautifulSoup import BeautifulSoup
+from twisted.internet import reactor
 from rdflib.Graph import Graph
 from rdflib import Namespace, URIRef, Literal
-from nevow import appserver, loaders, rend, tags as T, static, inevow, url
-from nevowopenid import WithOpenid
+import cyclone.web
+from web.contrib.template import render_genshi
 import outlookcalendar
 EM = Namespace("http://bigasterisk.com/exchangeMeeting/")
+render = render_genshi(["template"])
 
 def firstMeeting(meetings):
     """starttime, description of the first meeting that's not canceled"""
@@ -37,82 +34,85 @@ def nextDay():
         now += datetime.timedelta(1)
     return now.year, now.month, now.day
 
+def havePassword(config, top):
+    return bool(config.value(top, EM['password']))
 
-class Main(WithOpenid, rend.Page):
-    docFactory = loaders.xmlfile("main.html")
-    def __init__(self, config, top):
-        self.ymd = nextDay()
-        self.day = datetime.date(*self.ymd)
-        self.config, self.top = config, top
-        self.startDesc = None
+def setPassword(config, top, passwd):
+    config.add((top, EM['password'], Literal(passwd)))
 
-    def child_(self, ctx):
-        return Main(self.config, self.top)
+def absRedirect(handler, path):
+    return handler.redirect(handler.request.headers.get('X-Site-Root') + path)
 
-    def getStartDesc(self):
-        if self.startDesc is not None:
-            return defer.succeed(self.startDesc)
+class NextMeeting(cyclone.web.RequestHandler):
+    def get(self):
+        s = self.settings
+        if not havePassword(s.config, s.top):
+            return absRedirect(self, "needLogin")
         
-        d = defer.succeed(outlookcalendar.getCalendar(config, top, self.ymd))
-        #d = defer.succeed(open("calpage.html").read())
-        def withHtml(html):
-            meetings = outlookcalendar.parse(html)
-            start, desc = firstMeeting(meetings)
-            self.startDesc = start, desc
-            return self.startDesc
-        d.addCallback(withHtml)
-        return d
+        ymd = nextDay()
+        day = datetime.date(*ymd)
 
-    def render_date(self, ctx, data):
-        return self.day.strftime("%A, %Y-%m-%d")
-
-    def render_meetTime(self, ctx, data):
-        d = self.getStartDesc()
-        @d.addCallback
-        def done(startDesc):
-            return startDesc[0]
-        return d
-
-    def render_desc(self, ctx, data):
-        d = self.getStartDesc()
-        @d.addCallback
-        def done(startDesc):
-            return startDesc[1]
-        return d
-
-    def child_all(self, ctx):
-        return AllMeetings(self.config, self.top)
-
-setattr(Main, 'child_bg.jpg',
-        static.File("345009210_1f826cd5a1_b-iphone.jpg"))
-
-class TestPage(rend.Page):
-    docFactory = loaders.stan(T.h1['Test page'])
-        
-class AllMeetings(rend.Page):
-    docFactory = loaders.stan([T.h1['All meetings'], T.directive('list')])
-    def __init__(self, config, top):
-        self.ymd = nextDay()
-        self.day = datetime.date(*self.ymd)
-        self.config, self.top = config, top
-
-    @inlineCallbacks
-    def render_list(self, ctx, data):
-        html = yield outlookcalendar.getCalendar(config, top, self.ymd)
+        html = outlookcalendar.getCalendar(s.config, s.top, ymd)
         meetings = outlookcalendar.parse(html)
-        # show current time, cull completed meetings, etc
-        ul = T.ul[[T.li["%s - %s %s" % (m[0], m[1], m[2])] for m in meetings]]
+        start, desc = firstMeeting(meetings)
 
-        returnValue([T.div[self.day.isoformat()], ul])
-    
+        self.write(render.nextmeeting(
+            date=day.strftime("%A, %Y-%m-%d"),
+            meetTime=start,
+            desc=desc,
+            ))
+
+class AllMeetings(cyclone.web.RequestHandler):
+    def get(self):
+        s = self.settings
+        if not havePassword(s.config, s.top):
+            return absRedirect(self, "needLogin")
+
+        ymd = nextDay()
+        day = datetime.date(*ymd)
+
+        html = outlookcalendar.getCalendar(s.config,
+                                           s.top, ymd)
+        meetings = outlookcalendar.parse(html)
+
+        # show current time, cull completed meetings, etc
+        self.write(render.allmeetings(
+            day=day.isoformat(),
+            meetings=meetings,
+            ))
+
+class NeedLogin(cyclone.web.RequestHandler):
+    def get(self):
+        s = self.settings
+        self.write(render.needpassword(
+            user=s.config.value(s.top, EM['user']),
+            ))
+
+    def post(self):
+        s = self.settings
+        setPassword(s.config, s.top, self.get_argument("passwd"))
+        return absRedirect(self, "all")
+
+class Application(cyclone.web.Application):
+    def __init__(self, config, top):
+        handlers = [
+            (r"/", NextMeeting),
+            (r"/all", AllMeetings),
+            (r"/needLogin", NeedLogin),
+        ]
+
+        settings = {
+            "static_path": "./static",
+            "config" : config,
+            "top" : top,
+        }
+
+        cyclone.web.Application.__init__(self, handlers, **settings)
 
 config = Graph()
 top = URIRef("file://" + os.path.abspath("config.n3"))
 config.parse(top, format="n3")
 
-passwd = getpass.getpass("Password for %s: " % config.value(top, EM['user']))
-config.add((top, EM['password'], Literal(passwd)))
-
-log.startLogging(sys.stdout)
-reactor.listenTCP(9003, appserver.NevowSite(Main(config, top)))
+#log.startLogging(sys.stdout)
+reactor.listenTCP(9076, Application(config, top))
 reactor.run()

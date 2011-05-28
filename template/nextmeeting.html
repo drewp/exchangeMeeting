@@ -1,4 +1,5 @@
-<html xmlns="http://www.w3.org/1999/xhtml" xmlns:n="http://nevow.com/ns/nevow/0.1">
+<html xmlns="http://www.w3.org/1999/xhtml" 
+      xmlns:py="http://genshi.edgewall.org/">
   <head>
     <meta name="viewport" content="width = 320" />
     <style type="text/css">
@@ -18,17 +19,17 @@
   </head>
   <body>
     <div style="position: absolute; width: 320; height: 480; padding: 0px; border: 1px solid black">
-      <img style="position: absolute" src="bg.jpg" width="320" height="480"/>
+      <img style="position: absolute" src="static/bg.jpg" width="320" height="480"/>
 
       <div style="position: absolute; right: 0; top: 0; padding: 6px; background: #fff; opacity: .6">
-	<div style="visibility: hidden"><n:invisible n:render="date">Wednesday, 2007-08-30</n:invisible></div>
+	<div style="visibility: hidden">${date}</div>
       </div>
 
-      <div style="position: absolute; right: 7; top: 7; color: #bd6d78"><n:invisible n:render="date">Wednesday, 2007-08-30</n:invisible></div>
+      <div style="position: absolute; right: 7; top: 7; color: #bd6d78">${date}</div>
 
       <div style="position: absolute; left: 10; right: 10; top: 310; color: #fff">
-	First meeting is at <n:invisible n:render="meetTime">09:30</n:invisible>
-	<p style="font-style: italic; color: #d3b0a7; font-size: 90%;"><n:invisible n:render="desc">Pipeline Touchbase (All Shows)</n:invisible></p>
+	First meeting is at ${meetTime}
+	<p style="font-style: italic; color: #d3b0a7; font-size: 90%;">${desc}</p>
       </div>
 
       <div style="position: absolute; top: 480; right: 0; font-size: 9px">

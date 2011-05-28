@@ -1,0 +1,19 @@
+<html xmlns="http://www.w3.org/1999/xhtml" 
+      xmlns:py="http://genshi.edgewall.org/">
+  <head>
+    <title>all meetings</title>
+  </head>
+  <body>
+
+    <h1>All meetings</h1>
+
+    ${day}
+
+    <ul>
+      <li py:for="(a,b,c) in meetings">
+	${a} - ${b} ${c}
+      </li>
+    </ul>
+
+  </body>
+</html>
